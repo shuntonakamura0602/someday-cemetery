@@ -11,9 +11,12 @@ These are separate deliverables and must not be reported as interchangeable:
 | Path | Status in this checkout | What it means |
 | --- | --- | --- |
 | Local demo | Implemented; run the commands below to verify on this machine | Graves, ownership, flowers, recovery, and standard PNGs stay in browser storage. Examples are marked. Paid styles are preview-only. |
-| Shared Supabase service | Implementation, migration, seed, and connection instructions are present; no project credentials were supplied | It is connected only after a real project is configured, migrations are applied, anonymous Auth/CAPTCHA are enabled, and the shared-flow checks pass. There is no automatic fallback to demo. |
-| Polar Sandbox | Integration and tests of pure payment state transitions are present; no Sandbox credentials/product/webhook were supplied | It is connected only after a real Sandbox checkout, verified webhook, reconciliation, refund, and duplicate-delivery checks pass. The demo never simulates payment success. |
-| Production / live payments | Not configured or deployed | Keep `PAYMENTS_MODE=off` until production identity, support, monitoring, secrets, and live-payment verification are complete. |
+| Shared Supabase service | Connected to the dedicated `someday-cemetery` Preview project | The initial migration and idempotent seed are applied. Anonymous Auth and Supabase Auth CAPTCHA with Cloudflare Turnstile are enabled. The deployed app uses the shared database without a demo fallback. |
+| Vercel Preview | Deployed at [someday-cemetery-preview.vercel.app](https://someday-cemetery-preview.vercel.app) with Vercel Authentication enabled | Preview-only environment variables are configured, `PAYMENTS_MODE=off`, and the deployment uses the shared Supabase project. Sign in to the owning Vercel account to open the protected URL. |
+| Polar Sandbox | Integration and tests of pure payment state transitions are present; no Sandbox token, product, or webhook is connected | Checkout is intentionally disabled in Preview. Connect and verify Sandbox checkout, webhook, reconciliation, refund, and duplicate-delivery behavior before changing `PAYMENTS_MODE`. |
+| Production / live payments | Not deployed; live payments are not configured | Keep `PAYMENTS_MODE=off` until production identity, support, monitoring, secrets, and live-payment verification are complete. |
+
+The Preview, local demo, and Production are intentionally separate. The protected Preview is the current shared-service verification environment; it is not a Production release.
 
 ## Stack and fixed versions
 
@@ -130,7 +133,7 @@ npx playwright install webkit
 npm run test:e2e:webkit
 ```
 
-The repository’s automated coverage targets grapheme-aware input, NFC/LF normalization, contact-detail rejection, demo idempotency/version/recovery/flowers, payment configuration and order decisions, and real-Postgres constraints/concurrency/RLS. Real Supabase Auth/CAPTCHA, Safari, and Polar provider behavior remain external checks until their credentials and environments are supplied.
+The repository’s automated coverage targets grapheme-aware input, NFC/LF normalization, contact-detail rejection, demo idempotency/version/recovery/flowers, payment configuration and order decisions, and real-Postgres constraints/concurrency/RLS. The current Preview has exercised the shared Supabase schema/seed, Anonymous Auth configuration, and Turnstile readiness. A public test post was not submitted. Safari and Polar provider behavior remain external checks until those environments are exercised.
 
 Do not claim an LCP result without measuring and recording the device, browser, network, build, and URL. The target is 2.5 seconds, not a verified value in this checkout.
 
@@ -142,4 +145,4 @@ Do not claim an LCP result without measuring and recording the device, browser, 
 - [Routine operations and release checklist](docs/runbooks/operations.md)
 - [Assets and licenses](docs/assets-and-licenses.md)
 
-Before publishing, replace every placeholder with a real operator/contact/URL, define retention periods in the actual Privacy text, configure monitoring and the five-minute payment job, verify backup restoration, and complete the external acceptance matrix. The specification does not authorize creating production resources or enabling live charges by itself.
+Before a Production release, replace every placeholder with a real operator/contact/URL, define retention periods in the actual Privacy text, configure monitoring, verify backup restoration, and complete the external acceptance matrix. Configure the five-minute payment job only when Polar Sandbox/live payments are enabled. The current deployment is a Vercel-Authentication-protected Preview; Production resources and live charges remain disabled.
