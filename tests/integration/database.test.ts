@@ -13,18 +13,20 @@ describeDatabase("Someday Cemetery Postgres invariants", () => {
   const ownerA = randomUUID();
   const ownerB = randomUUID();
   const createdGraves: string[] = [];
+  const createdUsers = new Set<string>();
 
-  async function insertAnonymousUser(id: string) {
+  async function insertUser(id: string, isAnonymous = true) {
     await pool.query(
       `insert into auth.users (
         instance_id, id, aud, role, encrypted_password,
         raw_app_meta_data, raw_user_meta_data, created_at, updated_at, is_anonymous
       ) values (
         '00000000-0000-0000-0000-000000000000', $1, 'authenticated',
-        'authenticated', '', '{}'::jsonb, '{}'::jsonb, now(), now(), true
+        'authenticated', '', '{}'::jsonb, '{}'::jsonb, now(), now(), $2
       ) on conflict (id) do nothing`,
-      [id],
+      [id, isAnonymous],
     );
+    createdUsers.add(id);
   }
 
   async function createGrave(input: {
@@ -59,8 +61,8 @@ describeDatabase("Someday Cemetery Postgres invariants", () => {
   }
 
   beforeAll(async () => {
-    await insertAnonymousUser(ownerA);
-    await insertAnonymousUser(ownerB);
+    await insertUser(ownerA);
+    await insertUser(ownerB);
     const ordinal = Number(BigInt(`0x${gardenId.replaceAll("-", "").slice(0, 7)}`)) + 10_000;
     await pool.query(
       `insert into public.gardens(id, ordinal, capacity, layout_version)
@@ -72,6 +74,7 @@ describeDatabase("Someday Cemetery Postgres invariants", () => {
   afterAll(async () => {
     if (createdGraves.length > 0) {
       await pool.query("delete from public.reports where grave_id = any($1::uuid[])", [createdGraves]);
+      await pool.query("delete from public.moderation_log where grave_id = any($1::uuid[])", [createdGraves]);
       await pool.query("delete from public.flowers where grave_id = any($1::uuid[])", [createdGraves]);
       await pool.query("delete from public.grave_recovery where grave_id = any($1::uuid[])", [createdGraves]);
       await pool.query("delete from public.api_idempotency where resource_id = any($1::uuid[])", [createdGraves]);
@@ -86,8 +89,10 @@ describeDatabase("Someday Cemetery Postgres invariants", () => {
       await pool.query("delete from public.purchase_intents where grave_id = any($1::uuid[])", [createdGraves]);
       await pool.query("delete from public.graves where id = any($1::uuid[])", [createdGraves]);
     }
+    await pool.query("delete from public.api_idempotency where actor_id = any($1::uuid[])", [[...createdUsers]]);
+    await pool.query("delete from public.rate_limit_buckets where action like 'integration-retention-%'");
     await pool.query("delete from public.gardens where id = $1", [gardenId]);
-    await pool.query("delete from auth.users where id = any($1::uuid[])", [[ownerA, ownerB]]);
+    await pool.query("delete from auth.users where id = any($1::uuid[])", [[...createdUsers]]);
     await pool.end();
   });
 
@@ -313,6 +318,223 @@ describeDatabase("Someday Cemetery Postgres invariants", () => {
     });
   });
 
+  it("enforces operational, moderation, and anonymous-account retention windows", async () => {
+    const orphanOld = randomUUID();
+    const orphanRecent = randomUUID();
+    const liveOwner = randomUUID();
+    const paymentOwner = randomUUID();
+    const permanentUser = randomUUID();
+    await Promise.all([
+      insertUser(orphanOld),
+      insertUser(orphanRecent),
+      insertUser(liveOwner),
+      insertUser(paymentOwner),
+      insertUser(permanentUser, false),
+    ]);
+
+    const liveGrave = (await createGrave({
+      owner: liveOwner,
+      plot: 70,
+      payloadHash: "7".repeat(64),
+    })).rows[0];
+    const paymentGrave = (await createGrave({
+      owner: paymentOwner,
+      plot: 71,
+      payloadHash: "8".repeat(64),
+    })).rows[0];
+    await pool.query(
+      "select * from public.begin_purchase_intent($1,$2,'sandbox')",
+      [paymentGrave.grave_id, paymentOwner],
+    );
+    await pool.query(
+      "select public.delete_grave_and_scrub($1,$2,$3)",
+      [paymentGrave.grave_id, paymentOwner, paymentGrave.grave_version],
+    );
+
+    await pool.query(
+      `insert into private.anonymous_account_retention(user_id, empty_since)
+       values
+         ($1, now() - interval '91 days'),
+         ($2, now() - interval '89 days'),
+         ($3, now() - interval '91 days'),
+         ($4, now() - interval '91 days'),
+         ($5, now() - interval '91 days')
+       on conflict (user_id) do update set empty_since = excluded.empty_since`,
+      [orphanOld, orphanRecent, liveOwner, paymentOwner, permanentUser],
+    );
+
+    const expiredRateAction = `integration-retention-expired-${randomUUID()}`;
+    const currentRateAction = `integration-retention-current-${randomUUID()}`;
+    await pool.query(
+      `insert into public.rate_limit_buckets(action, subject_hash, window_start, count, expires_at)
+       values
+         ($1, $3, now() - interval '2 days', 1, now() - interval '1 day'),
+         ($2, $4, now(), 1, now() + interval '1 day')`,
+      [expiredRateAction, currentRateAction, "1".repeat(64), "2".repeat(64)],
+    );
+
+    const expiredIdempotencyKey = `expired-${randomUUID()}`;
+    const currentIdempotencyKey = `current-${randomUUID()}`;
+    await pool.query(
+      `insert into public.api_idempotency(
+         actor_id, operation, key, payload_hash, resource_id, expires_at
+       ) values
+         ($1, 'retention-expired', $3, $5, $7, now() - interval '1 day'),
+         ($2, 'retention-current', $4, $6, $8, now() + interval '1 day')`,
+      [
+        orphanOld,
+        orphanRecent,
+        expiredIdempotencyKey,
+        currentIdempotencyKey,
+        "3".repeat(64),
+        "4".repeat(64),
+        randomUUID(),
+        randomUUID(),
+      ],
+    );
+
+    const oldResolvedReport = randomUUID();
+    const recentResolvedReport = randomUUID();
+    const oldOpenReport = randomUUID();
+    await pool.query(
+      `insert into public.reports(
+         id, grave_id, reporter_hash, reason, details, status, created_at, resolved_at
+       ) values
+         ($1, $4, $5, 'other', 'old resolved', 'resolved', now() - interval '2 years', now() - interval '366 days'),
+         ($2, $4, $6, 'other', 'recent resolved', 'resolved', now() - interval '1 year', now() - interval '364 days'),
+         ($3, $4, $7, 'other', 'old but open', 'open', now() - interval '2 years', null)`,
+      [
+        oldResolvedReport,
+        recentResolvedReport,
+        oldOpenReport,
+        liveGrave.grave_id,
+        "5".repeat(64),
+        "6".repeat(64),
+        "7".repeat(64),
+      ],
+    );
+
+    const oldReportLog = randomUUID();
+    const recentReportLog = randomUUID();
+    await pool.query(
+      `insert into public.moderation_log(
+         id, admin_user_id, grave_id, action, reason, created_at
+       ) values
+         ($1, $3, $4, 'resolve_report', 'old report decision', now() - interval '366 days'),
+         ($2, $3, $4, 'dismiss_report', 'recent report decision', now() - interval '364 days')`,
+      [oldReportLog, recentReportLog, ownerA, liveGrave.grave_id],
+    );
+
+    await pool.query("select private.run_retention_cleanup(now())");
+
+    const retainedRateLimits = await pool.query<{ action: string }>(
+      "select action from public.rate_limit_buckets where action = any($1::text[])",
+      [[expiredRateAction, currentRateAction]],
+    );
+    expect(retainedRateLimits.rows.map((row) => row.action)).toEqual([currentRateAction]);
+
+    const retainedIdempotency = await pool.query<{ key: string }>(
+      "select key from public.api_idempotency where key = any($1::text[])",
+      [[expiredIdempotencyKey, currentIdempotencyKey]],
+    );
+    expect(retainedIdempotency.rows.map((row) => row.key)).toEqual([currentIdempotencyKey]);
+
+    const retainedReports = await pool.query<{ id: string }>(
+      "select id from public.reports where id = any($1::uuid[]) order by id",
+      [[oldResolvedReport, recentResolvedReport, oldOpenReport]],
+    );
+    expect(new Set(retainedReports.rows.map((row) => row.id))).toEqual(
+      new Set([recentResolvedReport, oldOpenReport]),
+    );
+
+    const retainedReportLogs = await pool.query<{ id: string }>(
+      "select id from public.moderation_log where id = any($1::uuid[])",
+      [[oldReportLog, recentReportLog]],
+    );
+    expect(retainedReportLogs.rows.map((row) => row.id)).toEqual([recentReportLog]);
+
+    const retainedUsers = await pool.query<{ id: string }>(
+      "select id from auth.users where id = any($1::uuid[])",
+      [[orphanOld, orphanRecent, liveOwner, paymentOwner, permanentUser]],
+    );
+    expect(new Set(retainedUsers.rows.map((row) => row.id))).toEqual(
+      new Set([orphanRecent, liveOwner, paymentOwner, permanentUser]),
+    );
+
+    const permanentMarker = await pool.query<{ count: string }>(
+      "select count(*)::text from private.anonymous_account_retention where user_id = $1",
+      [permanentUser],
+    );
+    expect(permanentMarker.rows[0].count).toBe("0");
+  });
+
+  it("starts and clears anonymous-account retention through ownership changes", async () => {
+    const deletedOwner = randomUUID();
+    const newOwner = randomUUID();
+    const transferOwner = randomUUID();
+    const recoveredOwner = randomUUID();
+    await Promise.all([
+      insertUser(deletedOwner),
+      insertUser(newOwner),
+      insertUser(transferOwner),
+      insertUser(recoveredOwner),
+    ]);
+
+    const deletedGrave = (await createGrave({
+      owner: deletedOwner,
+      plot: 60,
+      payloadHash: "8".repeat(64),
+    })).rows[0];
+    await pool.query(
+      "select public.delete_grave_and_scrub($1,$2,$3)",
+      [deletedGrave.grave_id, deletedOwner, deletedGrave.grave_version],
+    );
+    const deletionMarker = await pool.query<{ count: string }>(
+      `select count(*)::text
+       from private.anonymous_account_retention
+       where user_id = $1 and empty_since > now() - interval '1 minute'`,
+      [deletedOwner],
+    );
+    expect(deletionMarker.rows[0].count).toBe("1");
+
+    await pool.query(
+      `insert into private.anonymous_account_retention(user_id, empty_since)
+       values ($1, now() - interval '91 days')`,
+      [newOwner],
+    );
+    await createGrave({ owner: newOwner, plot: 61, payloadHash: "9".repeat(64) });
+    const newOwnerMarker = await pool.query<{ count: string }>(
+      "select count(*)::text from private.anonymous_account_retention where user_id = $1",
+      [newOwner],
+    );
+    expect(newOwnerMarker.rows[0].count).toBe("0");
+
+    const recoveryHash = "c".repeat(64);
+    const recoveredHash = "d".repeat(64);
+    const transferredGrave = (await createGrave({
+      owner: transferOwner,
+      plot: 62,
+      recoveryHash,
+      payloadHash: "a".repeat(64),
+    })).rows[0];
+    await pool.query(
+      `insert into private.anonymous_account_retention(user_id, empty_since)
+       values ($1, now() - interval '91 days')`,
+      [recoveredOwner],
+    );
+    await pool.query(
+      "select public.restore_grave_ownership($1,$2,$3,$4)",
+      [transferredGrave.grave_id, recoveryHash, recoveredOwner, recoveredHash],
+    );
+    const transferMarkers = await pool.query<{ user_id: string }>(
+      `select user_id
+       from private.anonymous_account_retention
+       where user_id = any($1::uuid[])`,
+      [[transferOwner, recoveredOwner]],
+    );
+    expect(transferMarkers.rows.map((row) => row.user_id)).toEqual([transferOwner]);
+  });
+
   it("keeps the fixed seed idempotent", async () => {
     const seed = await readFile(resolve(process.cwd(), "supabase/seed.sql"), "utf8");
     await pool.query(seed);
@@ -363,6 +585,52 @@ describeDatabase("Someday Cemetery Postgres invariants", () => {
          and has_function_privilege(roles.role_name, p.oid, 'EXECUTE')`,
     );
     expect(functionPrivileges.rows).toEqual([]);
+
+    const privateSchemaPrivileges = await pool.query<{ role_name: string; privilege_name: string }>(
+      `select roles.role_name, privileges.privilege_name
+       from (values ('anon'), ('authenticated')) as roles(role_name)
+       cross join (values ('USAGE'), ('CREATE')) as privileges(privilege_name)
+       where has_schema_privilege(roles.role_name, 'private', privileges.privilege_name)`,
+    );
+    expect(privateSchemaPrivileges.rows).toEqual([]);
+
+    const privateTablePrivileges = await pool.query<{
+      object_name: string;
+      role_name: string;
+      privilege_name: string;
+    }>(
+      `select c.relname as object_name, roles.role_name, privileges.privilege_name
+       from pg_catalog.pg_class c
+       join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+       cross join (values ('anon'), ('authenticated')) as roles(role_name)
+       cross join (
+         values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+                ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')
+       ) as privileges(privilege_name)
+       where n.nspname = 'private'
+         and c.relkind in ('r', 'p')
+         and has_table_privilege(roles.role_name, c.oid, privileges.privilege_name)`,
+    );
+    expect(privateTablePrivileges.rows).toEqual([]);
+
+    const privateFunctionPrivileges = await pool.query<{ object_name: string; role_name: string }>(
+      `select p.oid::regprocedure::text as object_name, roles.role_name
+       from pg_catalog.pg_proc p
+       join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+       cross join (values ('anon'), ('authenticated')) as roles(role_name)
+       where n.nspname = 'private'
+         and has_function_privilege(roles.role_name, p.oid, 'EXECUTE')`,
+    );
+    expect(privateFunctionPrivileges.rows).toEqual([]);
+
+    const serviceRoleCleanupPrivilege = await pool.query<{ allowed: boolean }>(
+      `select has_function_privilege(
+         'service_role',
+         'private.run_retention_cleanup(timestamptz)',
+         'EXECUTE'
+       ) as allowed`,
+    );
+    expect(serviceRoleCleanupPrivilege.rows[0].allowed).toBe(false);
   });
 });
 

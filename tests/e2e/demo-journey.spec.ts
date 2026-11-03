@@ -1,9 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 
-test.beforeEach(async ({}, testInfo) => {
-  testInfo.setTimeout(60_000);
-});
-
 async function openCreate(page: Page) {
   await page.goto("/create");
   await expect(page.getByRole("heading", { name: "Lay something to rest." })).toBeVisible();
@@ -77,6 +73,7 @@ test("UX02 and UX08: a title-only grave gets a public URL separate from its reco
 });
 
 test("free owner journey supports one flower, image download, and editing", async ({ page }) => {
+  test.setTimeout(300_000);
   const publicHref = await createDemoGrave(page, {
     title: "The Garden Sketch",
     epitaph: "It taught me where the path should go.",

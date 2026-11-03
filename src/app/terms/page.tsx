@@ -28,6 +28,11 @@ export default function TermsPage() {
         the moss, wildflowers, and lantern designs plus a high-resolution keepsake. It does not provide ranking,
         promotion, a subscription, or ownership of a plot outside this service.
       </p>
+      {env.PAYMENTS_MODE === "off" ? (
+        <p className="notice-box">
+          Checkout is disabled in this public beta. Paid designs remain previews and no purchase can be started.
+        </p>
+      ) : null}
       <p>
         The designs are available while the service operates. A downloaded keepsake can be saved on your own device. We
         do not promise permanent hosting or permanent operation. If a grave is deleted, the purchase does not prevent
@@ -41,6 +46,13 @@ export default function TermsPage() {
         the garden.
       </p>
 
+      <h2>Operator</h2>
+      {env.OPERATOR_NAME ? (
+        <p>{env.OPERATOR_NAME}</p>
+      ) : (
+        <p className="notice-box">A real operator identity must be configured before publication.</p>
+      )}
+
       <h2>Refund and support questions</h2>
       {env.SUPPORT_EMAIL ? (
         <p>
@@ -48,7 +60,7 @@ export default function TermsPage() {
           information to identify the purchase. Do not send a recovery link.
         </p>
       ) : (
-        <p className="notice-box">A real support address and operator identity must be added before publication.</p>
+        <p className="notice-box">A real support address must be configured before publication.</p>
       )}
     </article>
   );

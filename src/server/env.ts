@@ -7,6 +7,11 @@ const optionalString = z.preprocess(
   z.string().trim().min(1).optional(),
 );
 
+const optionalEmail = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim() || undefined : value),
+  z.email().optional(),
+);
+
 const serverEnvSchema = z.object({
   APP_STAGE: z.enum(["local", "preview", "production"]).default("local"),
   APP_BASE_URL: z.url().default("http://127.0.0.1:3000"),
@@ -24,7 +29,7 @@ const serverEnvSchema = z.object({
   VISITOR_HASH_SECRET: optionalString,
   CRON_SECRET: optionalString,
   ADMIN_USER_IDS: z.string().default(""),
-  SUPPORT_EMAIL: optionalString,
+  SUPPORT_EMAIL: optionalEmail,
   OPERATOR_NAME: optionalString,
 });
 

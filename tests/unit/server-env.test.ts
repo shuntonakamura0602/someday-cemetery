@@ -77,4 +77,14 @@ describe("server environment publication guards", () => {
     vi.stubEnv("OPERATOR_NAME", "Example operator");
     expect(getServerEnv().APP_STAGE).toBe("production");
   });
+
+  it("rejects an invalid public support address", () => {
+    sharedEnvironment("production");
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "site-key");
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "turnstile-secret");
+    vi.stubEnv("SUPPORT_EMAIL", "not-an-email-address");
+    vi.stubEnv("OPERATOR_NAME", "Example operator");
+
+    expect(() => getServerEnv()).toThrow();
+  });
 });

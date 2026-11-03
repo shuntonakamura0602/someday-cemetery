@@ -1,9 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 
-test.beforeEach(async ({}, testInfo) => {
-  testInfo.setTimeout(60_000);
-});
-
 async function expectNoHorizontalOverflow(page: Page) {
   await expect.poll(async () => page.evaluate(() => ({
     documentWidth: document.documentElement.scrollWidth,

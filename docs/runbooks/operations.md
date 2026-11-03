@@ -16,7 +16,7 @@ Never place Sandbox keys, products, events, or orders in production. Never place
 ## Pre-release checklist
 
 1. Run lint, typecheck, unit tests, production build, demo E2E, and disposable-Postgres integration tests.
-2. Apply migrations from a clean database and run seed twice. Confirm one Garden 1 and 12 Examples.
+2. Enable Supabase Cron / `pg_cron`, apply migrations from a clean database, and run seed twice. Confirm one Garden 1 and 12 Examples. The retention migration must stop with `PG_CRON_REQUIRED` if Cron was not enabled.
 3. Confirm `anon` and `authenticated` cannot read/write any application base table or execute internal RPCs.
 4. Enable anonymous Auth and CAPTCHA. Test browsing without a user, create-time anonymous sign-in, another-browser recovery, old-key rejection, and old-owner rejection.
 5. Configure Turnstile and test expired/invalid/used tokens and report limits.
@@ -34,8 +34,11 @@ For sales, additionally complete every Sandbox acceptance check in `payments.md`
 
 - Every five minutes: authenticated `POST /api/internal/reconcile-payments`, using `Authorization: Bearer <CRON_SECRET>`. Keep the bounded batch and DB leases.
 - Within 24 hours: every active entitlement’s source order must be refreshed so refunds are found during webhook outages.
-- Daily or bounded maintenance: remove expired rate-limit buckets and idempotency rows; retain unprocessed webhook events.
-- According to the published retention policy: archive/prune processed operational records. Never remove order evidence required for refunds, disputes, or entitlement provenance.
+- Daily at 03:17 UTC: the Supabase Cron job `someday-cemetery-retention` removes rate-limit and idempotency rows after `expires_at`, removes resolved/dismissed reports and their report-specific moderation logs after one year, and removes eligible anonymous accounts after 90 days without a live grave. Live owners and payment/moderation-referenced users are retained.
+- Daily at 03:47 UTC: `someday-cemetery-cron-history-retention` removes Cron run history older than seven days.
+- Recovery-token and flower hashes remain only while the corresponding grave exists; the grave-deletion transaction removes them and scrubs public text/ownership immediately.
+- Retain unprocessed webhook events and all order evidence needed for refunds, disputes, reconciliation, or entitlement provenance.
+- After database upgrades or `pg_cron` maintenance, confirm both named jobs are active and inspect their latest successful runs.
 - Regularly: Supabase database/security advisors, failed webhook/reconciliation queues, moderation backlog, backups, expiring credentials, error rate, and latency.
 
 The application’s metrics table records aggregate operational events only. Do not add titles, epitaphs, recovery URLs, emails, or billing data. Examples, local demo, preview, and Sandbox do not count as production activity or revenue.
