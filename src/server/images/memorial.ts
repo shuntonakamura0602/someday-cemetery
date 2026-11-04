@@ -1,10 +1,31 @@
 import "server-only";
 
+import path from "node:path";
+
 import sharp from "sharp";
 
 import { DESIGNS, buildMemorialImageModel, wrapText, type PublicGraveDto } from "@/domain";
 import type { Locale } from "@/i18n/config";
 import { localizeExampleGrave } from "@/i18n/presentation";
+
+const memorialFontPath = path.join(
+  process.cwd(),
+  "src/server/images/fonts/NotoSansJP-wght.ttf",
+);
+let memorialFontReady: Promise<Buffer> | undefined;
+
+async function ensureMemorialFont() {
+  process.env.XDG_CACHE_HOME ||= "/tmp";
+  memorialFontReady ??= sharp({
+    text: {
+      text: "日本語",
+      font: "Noto Sans JP 12",
+      fontfile: memorialFontPath,
+      rgba: true,
+    },
+  }).png().toBuffer();
+  await memorialFontReady;
+}
 
 function escapeXml(value: string) {
   return value.replace(/[<>&"']/g, (character) => ({
@@ -54,7 +75,7 @@ export function memorialSvg(grave: PublicGraveDto, locale: Locale = "en") {
   const titleY = model.isExample ? 240 : 220;
   const titleHeight = titleLines.length * titleSize * 1.08;
   const epitaphY = titleY + titleHeight + 8;
-  const titleFamily = locale === "ja" ? "Noto Serif JP, Noto Sans JP, serif" : "Georgia, serif";
+  const titleFamily = locale === "ja" ? "Noto Sans JP, sans-serif" : "Georgia, serif";
   const bodyFamily = locale === "ja" ? "Noto Sans JP, system-ui, sans-serif" : "system-ui, sans-serif";
   const date = [
     model.startedYear ? (locale === "ja" ? `開始 ${model.startedYear}年` : `Started ${model.startedYear}`) : null,
@@ -94,6 +115,7 @@ export function memorialSvg(grave: PublicGraveDto, locale: Locale = "en") {
 }
 
 export async function renderMemorialPng(grave: PublicGraveDto, scale: 1 | 2, locale: Locale = "en") {
+  await ensureMemorialFont();
   return sharp(Buffer.from(memorialSvg(grave, locale)))
     .resize(1200 * scale, 630 * scale, { fit: "fill" })
     .png({ compressionLevel: 9, adaptiveFiltering: true })
