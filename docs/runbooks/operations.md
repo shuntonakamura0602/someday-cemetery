@@ -21,12 +21,14 @@ Never place Sandbox keys, products, events, or orders in production. Never place
 4. Enable anonymous Auth and CAPTCHA. Test browsing without a user, create-time anonymous sign-in, another-browser recovery, old-key rejection, and old-owner rejection.
 5. Configure Turnstile and test expired/invalid/used tokens and report limits.
 6. Configure real `APP_BASE_URL`, `OPERATOR_NAME`, `SUPPORT_EMAIL`, cookie/visitor/cron secrets, and administrator UUIDs.
-7. Review About, Guidelines, Privacy, and Terms against actual operator identity, providers, retention periods, refund process, and jurisdiction. Do not state unverified legal compliance.
-8. Test 360px Chromium, current desktop Chromium, and Safari-family mobile for create, full reading, flower, copy, image download, and checkout reachability.
-9. Verify public/owner/admin/recovery responses are not shared-cached. Hide a grave and confirm its text disappears from map, detail, recent, random, and public image.
-10. Test backup restoration in a separate project and record recovery time.
-11. Configure error monitoring without titles, epitaphs, recovery fragments, IPs, billing data, or secrets.
-12. Measure LCP on a production build and record conditions. Do not mark the 2.5s goal complete without evidence.
+7. Review About, Guidelines, Privacy, and Terms in both English and Japanese against actual operator identity, providers, retention periods, refund process, and jurisdiction. Do not state unverified legal compliance.
+8. Switch EN → 日本語 → EN on public, owner, recovery, and admin pages. Confirm the URL/query/hash and in-progress form draft are preserved, `<html lang>` and metadata change, user-written content is unchanged, and the preference survives a new tab.
+9. Test 360px Chromium, current desktop Chromium, and Safari-family mobile for create, full reading, flower, copy, image download, and checkout reachability.
+10. Download one standard memorial image in each language and inspect the Japanese glyphs. When external services are enabled, verify the Turnstile widget and Polar Checkout receive the selected locale.
+11. Verify public/owner/admin/recovery responses are not shared-cached. Hide a grave and confirm its text disappears from map, detail, recent, random, and public image.
+12. Test backup restoration in a separate project and record recovery time.
+13. Configure error monitoring without titles, epitaphs, recovery fragments, IPs, billing data, or secrets.
+14. Measure LCP on a production build and record conditions. Do not mark the 2.5s goal complete without evidence.
 
 For sales, additionally complete every Sandbox acceptance check in `payments.md`, repeat the environment-sensitive subset with separate live configuration, and obtain explicit authorization before setting `PAYMENTS_MODE=live`.
 

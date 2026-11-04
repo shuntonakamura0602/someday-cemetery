@@ -1,6 +1,8 @@
 "use client";
 
 import { DESIGNS, buildMemorialImageModel, wrapText, type PublicGraveDto } from "../domain";
+import type { Locale } from "@/i18n/config";
+import { localizeExampleGrave } from "@/i18n/presentation";
 
 function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
   context.beginPath();
@@ -21,13 +23,13 @@ function drawCenteredLines(context: CanvasRenderingContext2D, lines: string[], c
   return startY + lines.length * lineHeight;
 }
 
-export async function createDemoImageBlob(grave: PublicGraveDto): Promise<Blob> {
+export async function createDemoImageBlob(grave: PublicGraveDto, locale: Locale = "en"): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = 1200;
   canvas.height = 630;
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("Canvas is unavailable in this browser.");
-  const model = buildMemorialImageModel(grave);
+  if (!context) throw new Error(locale === "ja" ? "このブラウザでは画像を作成できません。" : "Canvas is unavailable in this browser.");
+  const model = buildMemorialImageModel(localizeExampleGrave(grave, locale), locale);
   const colors = DESIGNS[model.style].colors;
 
   const background = context.createLinearGradient(0, 0, 0, 630);
@@ -67,7 +69,7 @@ export async function createDemoImageBlob(grave: PublicGraveDto): Promise<Blob> 
   if (model.isExample) {
     context.fillStyle = "#d8e5cd";
     context.font = "700 18px ui-sans-serif, system-ui, sans-serif";
-    context.fillText("EXAMPLE", 600, 183);
+    context.fillText(locale === "ja" ? "投稿例" : "EXAMPLE", 600, 183);
   }
 
   let titleSize = 58;
@@ -100,16 +102,19 @@ export async function createDemoImageBlob(grave: PublicGraveDto): Promise<Blob> 
 
   context.font = "500 20px ui-sans-serif, system-ui, sans-serif";
   context.fillStyle = "#d8ded5";
-  const dates = [model.startedYear ? `Started ${model.startedYear}` : "", `Laid to rest ${model.buriedDate}`].filter(Boolean).join("  ·  ");
+  const dates = [
+    model.startedYear ? (locale === "ja" ? `開始 ${model.startedYear}年` : `Started ${model.startedYear}`) : "",
+    locale === "ja" ? `埋葬 ${model.buriedDate}` : `Laid to rest ${model.buriedDate}`,
+  ].filter(Boolean).join("  ·  ");
   context.fillText(dates, 600, Math.max(cursor, 505));
 
   return await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The image could not be created.")), "image/png");
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(locale === "ja" ? "画像を作成できませんでした。" : "The image could not be created.")), "image/png");
   });
 }
 
-export async function downloadDemoImage(grave: PublicGraveDto): Promise<void> {
-  const blob = await createDemoImageBlob(grave);
+export async function downloadDemoImage(grave: PublicGraveDto, locale: Locale = "en"): Promise<void> {
+  const blob = await createDemoImageBlob(grave, locale);
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

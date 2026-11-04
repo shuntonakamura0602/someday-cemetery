@@ -1,11 +1,64 @@
 import type { Metadata } from "next";
 
+import { getServerLocale } from "@/i18n/server";
 import { getServerEnv } from "@/server/env";
 
-export const metadata: Metadata = { title: "Terms" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getServerLocale()) === "ja" ? "利用規約" : "Terms" };
+}
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const locale = await getServerLocale();
   const env = getServerEnv();
+  if (locale === "ja") {
+    return (
+      <article className="content-page">
+        <p className="eyebrow">利用規約</p>
+        <h1>静かな場所のための、小さな約束。</h1>
+        <p className="lede">
+          Someday Cemeteryを利用することで、あなたは共有する権利のある内容だけを投稿し、コミュニティガイドラインを守ることに同意します。
+        </p>
+
+        <h2>サービスについて</h2>
+        <p>
+          自分自身の未完成のプロジェクトについて、匿名の公開墓碑を作成し、他の公開墓碑を読み、花を手向け、公開リンクを共有し、
+          標準画像をダウンロードできます。ガイドライン違反や法的・運用上の危険がある内容は、運営者が確認、非表示、削除する場合があります。
+        </p>
+
+        <h2>Custom Headstone</h2>
+        <p>
+          Custom Headstoneは、決済時に表示される税金を除きUS$7です。墓碑1件に対する1回限りの購入で、苔、野の花、ランタンの
+          デザインと高解像度の記念画像を利用できます。順位、宣伝、サブスクリプション、このサービス外の区画所有権は含まれません。
+        </p>
+        {env.PAYMENTS_MODE === "off" ? (
+          <p className="notice-box">この公開ベータでは決済を停止しています。有料デザインはプレビューのみで、購入は開始できません。</p>
+        ) : null}
+        <p>
+          デザインはサービスの運営中に利用できます。ダウンロードした記念画像は自分の端末に保存できます。恒久的なホスティングや
+          サービスの永続運営を保証するものではありません。墓碑を削除する場合、購入によって削除が妨げられることはなく、返金については別途対応します。
+        </p>
+
+        <h2>提供状況と変更</h2>
+        <p>
+          サービスは変更、新規購入の一時停止、終了を行う場合があります。サービスが提供されている間、決済の停止を理由に既存の有効な
+          利用権を意図的に取り消すことはありません。庭を守るため、不正なアクセスや通信を制限する場合があります。
+        </p>
+
+        <h2>運営者</h2>
+        {env.OPERATOR_NAME ? <p>{env.OPERATOR_NAME}</p> : <p className="notice-box">公開前に実在する運営者名の設定が必要です。</p>}
+
+        <h2>返金・サポートについて</h2>
+        {env.SUPPORT_EMAIL ? (
+          <p>
+            墓碑の公開URLと購入を特定できる情報を添えて、<a href={`mailto:${env.SUPPORT_EMAIL}`}>{env.SUPPORT_EMAIL}</a>まで
+            お問い合わせください。復旧リンクは送らないでください。
+          </p>
+        ) : (
+          <p className="notice-box">公開前に実際に受信できるお問い合わせ先の設定が必要です。</p>
+        )}
+      </article>
+    );
+  }
   return (
     <article className="content-page">
       <p className="eyebrow">Terms</p>

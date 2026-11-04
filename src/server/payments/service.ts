@@ -2,6 +2,8 @@ import "server-only";
 
 import type { Polar } from "@polar-sh/sdk/2026-10";
 
+import type { Locale } from "@/i18n/config";
+
 import { getPolarClient } from "./client";
 import {
   getPaymentConfig,
@@ -43,13 +45,14 @@ function polarFor(deps: ServiceDependencies): Polar {
 export function buildCheckoutRequest(
   config: PaymentConfig & { productId: string },
   intent: PurchaseIntent,
+  locale: Locale = "en",
 ): CheckoutCreate {
   return {
     products: [config.productId],
     allow_discount_codes: false,
     allow_trial: false,
     currency: PRODUCT_CURRENCY,
-    locale: "en",
+    locale,
     metadata: {
       purchase_intent_id: intent.id,
       grave_id: intent.graveId,
@@ -101,6 +104,7 @@ export async function startCheckout(
   graveId: string,
   ownerUserId: string,
   supplied?: ServiceDependencies,
+  locale: Locale = "en",
 ): Promise<CheckoutStartResult> {
   const deps = supplied ?? dependencies();
   requireSalesConfig(deps.config);
@@ -169,7 +173,7 @@ export async function startCheckout(
 
   try {
     const polar = deps.polar ?? getPolarClient(deps.config);
-    const checkout = await polar.checkouts.create(buildCheckoutRequest(deps.config, intent));
+    const checkout = await polar.checkouts.create(buildCheckoutRequest(deps.config, intent, locale));
     if (!verifyCreatedCheckout(checkout, deps.config.productId)) {
       await deps.store.markIntentReview(intent.id, "CHECKOUT_TERMS_MISMATCH");
       throw new PaymentError(

@@ -42,5 +42,7 @@ describe("Polar checkout request", () => {
     );
     expect("customer_email" in request).toBe(false);
     expect("discount_id" in request).toBe(false);
+    expect(request.locale).toBe("en");
+    expect(buildCheckoutRequest(config, intent, "ja").locale).toBe("ja");
   });
 });

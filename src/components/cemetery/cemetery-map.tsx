@@ -3,7 +3,9 @@
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
 import { Gravestone } from "@/components/grave/gravestone";
+import { useI18n } from "@/components/language-provider";
 import { GARDEN_V1_PLOTS, type GardenPlotDto } from "@/domain";
+import { localizeExampleGrave } from "@/i18n/presentation";
 
 type CemeteryMapProps = {
   plots: GardenPlotDto[];
@@ -20,10 +22,32 @@ export function CemeteryMap({
   onSelectPlot,
   onOpenGrave,
 }: CemeteryMapProps) {
+  const { locale } = useI18n();
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const drag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const plotMap = useMemo(() => new Map(plots.map((plot) => [plot.plotIndex, plot])), [plots]);
+  const text = locale === "ja"
+    ? {
+        mapLabel: "操作できる墓地の地図",
+        instructions: "ドラッグして庭を歩く · 矢印キーで区画を移動",
+        zoomControls: "地図の拡大・縮小",
+        zoomOut: "縮小",
+        zoomIn: "拡大",
+        gridLabel: "100区画の墓地",
+        selected: "選択済み",
+        leaveMap: "地図を離れる",
+      }
+    : {
+        mapLabel: "Interactive cemetery map",
+        instructions: "Drag to wander · Use arrow keys between plots",
+        zoomControls: "Map zoom controls",
+        zoomOut: "Zoom out",
+        zoomIn: "Zoom in",
+        gridLabel: "One hundred cemetery plots",
+        selected: "Chosen",
+        leaveMap: "Leave the map",
+      };
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     if ((event.target as HTMLElement).closest("button")) return;
@@ -54,14 +78,14 @@ export function CemeteryMap({
   }
 
   return (
-    <section className="cemetery-map-shell" aria-label="Interactive cemetery map">
+    <section className="cemetery-map-shell" aria-label={text.mapLabel}>
       <div className="map-toolbar">
-        <p>Drag to wander · Use arrow keys between plots</p>
-        <div className="map-zoom" aria-label="Map zoom controls">
+        <p>{text.instructions}</p>
+        <div className="map-zoom" aria-label={text.zoomControls}>
           <button
             className="icon-button"
             type="button"
-            aria-label="Zoom out"
+            aria-label={text.zoomOut}
             onClick={() => setZoom((value) => Math.max(0.82, Number((value - 0.18).toFixed(2))))}
           >
             −
@@ -70,7 +94,7 @@ export function CemeteryMap({
           <button
             className="icon-button"
             type="button"
-            aria-label="Zoom in"
+            aria-label={text.zoomIn}
             onClick={() => setZoom((value) => Math.min(1.54, Number((value + 0.18).toFixed(2))))}
           >
             +
@@ -101,17 +125,24 @@ export function CemeteryMap({
             <span key={light} className={`garden-light garden-light-${light}`} aria-hidden="true" />
           ))}
 
-          <div className="plot-layer" role="grid" aria-label="One hundred cemetery plots">
+          <div className="plot-layer" role="grid" aria-label={text.gridLabel}>
             {GARDEN_V1_PLOTS.map((position) => {
               const plot = plotMap.get(position.index) ?? { plotIndex: position.index, occupied: false };
-              const grave = plot.grave;
+              const grave = plot.grave ? localizeExampleGrave(plot.grave, locale) : undefined;
               const isSelected = selectedPlot === position.index;
               const isActionable = Boolean((grave && onOpenGrave) || (selectable && !plot.occupied && onSelectPlot));
-              const label = grave
-                ? `Plot ${position.index + 1}: ${grave.title}${grave.isExample ? ", example" : ""}`
-                : plot.occupied
-                  ? `Plot ${position.index + 1}: occupied, unavailable`
-                  : `Plot ${position.index + 1}: open resting place`;
+              const plotNumber = position.index + 1;
+              const label = locale === "ja"
+                ? grave
+                  ? `区画 ${plotNumber}: ${grave.title}${grave.isExample ? "、投稿例" : ""}`
+                  : plot.occupied
+                    ? `区画 ${plotNumber}: 使用中のため選択できません`
+                    : `区画 ${plotNumber}: 空いている場所`
+                : grave
+                  ? `Plot ${plotNumber}: ${grave.title}${grave.isExample ? ", example" : ""}`
+                  : plot.occupied
+                    ? `Plot ${plotNumber}: occupied, unavailable`
+                    : `Plot ${plotNumber}: open resting place`;
               return (
                 <button
                   key={position.index}
@@ -138,7 +169,7 @@ export function CemeteryMap({
                   ) : (
                     <span className="empty-plot-marker" aria-hidden="true" />
                   )}
-                  {isSelected ? <span className="plot-selected-label">Chosen</span> : null}
+                  {isSelected ? <span className="plot-selected-label">{text.selected}</span> : null}
                 </button>
               );
             })}
@@ -146,7 +177,7 @@ export function CemeteryMap({
         </div>
       </div>
       <a className="skip-map" href="#after-map">
-        Leave the map
+        {text.leaveMap}
       </a>
     </section>
   );

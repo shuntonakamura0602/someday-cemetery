@@ -1,5 +1,7 @@
-/** Canonical English product copy. Keep repeated actions here so the UI stays consistent. */
-export const copy = {
+import type { Locale } from "@/i18n/config";
+
+/** Canonical product copy. Keep repeated actions here so the UI stays consistent. */
+const englishCopy = {
   "app.name": "Someday Cemetery",
   "home.tagline": "A resting place for unfinished things.",
   "home.description":
@@ -71,8 +73,78 @@ export const copy = {
   "checkout.disabled": "Purchases are not available in this environment.",
 } as const;
 
-export type CopyKey = keyof typeof copy;
+export type CopyKey = keyof typeof englishCopy;
 
-export function t(key: CopyKey): (typeof copy)[CopyKey] {
-  return copy[key];
+const japaneseCopy: Record<CopyKey, string> = {
+  "app.name": "Someday Cemetery",
+  "home.tagline": "未完成のものが眠る場所。",
+  "home.description": "公開できなかったアプリ。書き終えられなかった小説。いつの間にか手放した計画。",
+  "home.instruction": "場所を選び、短い別れの言葉を書いて、静かに眠らせましょう。",
+  "action.create": "未完成のものを眠らせる",
+  "action.explore": "墓地を歩く",
+  "action.random": "ランダムに墓碑を訪れる",
+  "action.list": "一覧表示",
+  "action.map": "地図表示",
+  "action.myGraves": "自分の墓碑",
+  "plot.choose": "眠る場所を選ぶ",
+  "form.title": "プロジェクト名",
+  "form.epitaph": "別れの言葉（任意）",
+  "form.started": "開始年（任意）",
+  "form.publicNotice": "プロジェクト名と別れの言葉は公開されます。",
+  "form.submit": "静かに眠らせる",
+  "form.saving": "場所を用意しています…",
+  "grave.created": "あなたのプロジェクトの居場所ができました。",
+  "flower.action": "花を手向ける",
+  "flower.done": "花を手向けました",
+  "share.public": "公開リンクをコピー",
+  "share.image": "画像をダウンロード",
+  "share.copied": "リンクをコピーしました",
+  "recovery.save": "非公開の復旧リンクを保存",
+  "recovery.warning": "このリンクを知っている人は墓碑の編集権限を引き継げます。公開しないでください。",
+  "recovery.explanation":
+    "別の端末でも編集できるよう、このリンクを保存してください。このリンクとブラウザの編集権限を両方失うと、アクセスは復旧できません。",
+  "recovery.action": "編集権限を復旧",
+  "recovery.success": "編集権限を復旧しました。新しい復旧リンクを保存してください。",
+  "recovery.invalid": "この復旧リンクは無効か、すでに置き換えられています。",
+  "upgrade.title": "墓石をカスタマイズ",
+  "upgrade.price": "この墓碑1件につき1回 US$7",
+  "upgrade.tax": "決済時に税金が加算される場合があります。",
+  "upgrade.buy": "3種類のデザインをすべて解放",
+  "upgrade.download": "高解像度画像をダウンロード",
+  "payment.pending": "決済を確認しています。",
+  "payment.done": "カスタム墓石を利用できるようになりました。",
+  "payment.check": "もう一度確認",
+  "payment.cancel": "墓碑はそのまま残っています。カスタマイズはいつでも再開できます。",
+  "error.plotTaken": "別の人がこの区画を選びました。下書きは残っています。別の場所を選んでください。",
+  "error.unavailable": "この墓碑は現在利用できません。",
+  "error.network": "問題が発生しました。下書きは残っています。もう一度お試しください。",
+  "error.rateLimit": "少し時間をおいてから、もう一度お試しください。",
+  "error.version": "この墓碑は別の場所で更新されています。最新の内容を確認してから保存してください。",
+  "report.action": "この墓碑を通報",
+  "report.success": "通報を受け付けました。ありがとうございます。",
+  "delete.action": "この墓碑を削除",
+  "delete.confirm": "この墓碑を削除しますか？文章と画像はサイトから削除され、元に戻すことはできません。",
+  "example.badge": "投稿例",
+  "demo.badge": "デモ — 変更はこのブラウザにのみ保存されます",
+  "garden.empty": "この庭には、まだ墓碑がありません。",
+  "grave.buried": "埋葬日",
+  "grave.started": "開始年",
+  "grave.location": "眠っている場所",
+  "navigation.home": "墓地のホーム",
+  "navigation.about": "この場所について",
+  "navigation.guidelines": "ガイドライン",
+  "navigation.privacy": "プライバシー",
+  "navigation.terms": "利用規約",
+  "navigation.support": "お問い合わせ",
+  "owner.edit": "この墓碑を編集",
+  "owner.recovery": "新しい復旧リンクを作成",
+  "owner.none": "このブラウザで作成した墓碑はまだありません。",
+  "checkout.disabled": "この環境では購入できません。",
+};
+
+export const copy = englishCopy;
+export const copies = { en: englishCopy, ja: japaneseCopy } as const;
+
+export function t(key: CopyKey, locale: Locale = "en"): string {
+  return copies[locale][key];
 }

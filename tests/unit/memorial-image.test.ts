@@ -40,4 +40,22 @@ describe("server memorial images", () => {
     await expect(sharp(free).metadata()).resolves.toMatchObject({ width: 1200, height: 630, format: "png" });
     await expect(sharp(keepsake).metadata()).resolves.toMatchObject({ width: 2400, height: 1260, format: "png" });
   }, 20_000);
+
+  it("localizes labels, dates, and stable example content without changing user text", () => {
+    const userSvg = memorialSvg(grave({ title: "静かな試作品", epitaph: "想像できただけで十分でした。" }), "ja");
+    expect(userSvg).toContain("静かな試作品");
+    expect(userSvg).toContain("想像できただけで十分でした。");
+    expect(userSvg).toContain("開始 2024年");
+    expect(userSvg).toContain("埋葬 2026年10月28日");
+
+    const exampleSvg = memorialSvg(grave({
+      id: "20000000-0000-4000-8000-000000000001",
+      title: "My Weekend App",
+      epitaph: "The weekend was never specified.",
+      isExample: true,
+    }), "ja");
+    expect(exampleSvg).toContain("投稿例");
+    expect(exampleSvg).toContain("週末アプリ");
+    expect(exampleSvg).not.toContain("My Weekend App");
+  });
 });

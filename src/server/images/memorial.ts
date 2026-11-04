@@ -3,6 +3,8 @@ import "server-only";
 import sharp from "sharp";
 
 import { DESIGNS, buildMemorialImageModel, wrapText, type PublicGraveDto } from "@/domain";
+import type { Locale } from "@/i18n/config";
+import { localizeExampleGrave } from "@/i18n/presentation";
 
 function escapeXml(value: string) {
   return value.replace(/[<>&"']/g, (character) => ({
@@ -15,7 +17,16 @@ function escapeXml(value: string) {
 }
 
 function approximateWidth(text: string, fontSize: number) {
-  return Array.from(text).reduce((sum, character) => sum + (/[\p{Script=Han}\p{Emoji_Presentation}]/u.test(character) ? 1 : /[MW]/.test(character) ? 0.86 : /[il.,']/u.test(character) ? 0.28 : 0.56) * fontSize, 0);
+  return Array.from(text).reduce(
+    (sum, character) => sum + (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Emoji_Presentation}]/u.test(character)
+      ? 1
+      : /[MW]/.test(character)
+        ? 0.86
+        : /[il.,']/u.test(character)
+          ? 0.28
+          : 0.56) * fontSize,
+    0,
+  );
 }
 
 function textLines(lines: string[], y: number, lineHeight: number, fontSize: number, family: string, weight: number, fill: string) {
@@ -24,8 +35,8 @@ function textLines(lines: string[], y: number, lineHeight: number, fontSize: num
   ).join("");
 }
 
-export function memorialSvg(grave: PublicGraveDto) {
-  const model = buildMemorialImageModel(grave);
+export function memorialSvg(grave: PublicGraveDto, locale: Locale = "en") {
+  const model = buildMemorialImageModel(localizeExampleGrave(grave, locale), locale);
   const colors = DESIGNS[model.style].colors;
   let titleSize = 60;
   let epitaphSize = 28;
@@ -43,7 +54,12 @@ export function memorialSvg(grave: PublicGraveDto) {
   const titleY = model.isExample ? 240 : 220;
   const titleHeight = titleLines.length * titleSize * 1.08;
   const epitaphY = titleY + titleHeight + 8;
-  const date = [model.startedYear ? `Started ${model.startedYear}` : null, `Laid to rest ${model.buriedDate}`].filter(Boolean).join("  ·  ");
+  const titleFamily = locale === "ja" ? "Noto Serif JP, Noto Sans JP, serif" : "Georgia, serif";
+  const bodyFamily = locale === "ja" ? "Noto Sans JP, system-ui, sans-serif" : "system-ui, sans-serif";
+  const date = [
+    model.startedYear ? (locale === "ja" ? `開始 ${model.startedYear}年` : `Started ${model.startedYear}`) : null,
+    locale === "ja" ? `埋葬 ${model.buriedDate}` : `Laid to rest ${model.buriedDate}`,
+  ].filter(Boolean).join("  ·  ");
   const decorative = model.style === "moss"
     ? `<path d="M300 130c60-42 144-15 201 8-43 5-88 23-126 47-27-26-54-29-75-55z" fill="${colors.detail}" opacity=".82"/>`
     : model.style === "wildflowers"
@@ -69,16 +85,16 @@ export function memorialSvg(grave: PublicGraveDto) {
     <path d="M325 500V215c0-85 64-145 275-145s275 60 275 145v285" fill="none" stroke="#f1eee4" stroke-opacity=".12" stroke-width="3"/>
     ${decorative}
     <text x="600" y="135" text-anchor="middle" font-family="system-ui, sans-serif" font-size="21" font-weight="700" letter-spacing="5" fill="#f1eee4">SOMEDAY CEMETERY</text>
-    ${model.isExample ? `<rect x="540" y="158" width="120" height="30" rx="15" fill="#594b2e"/><text x="600" y="179" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#efd6a0">EXAMPLE</text>` : ""}
-    ${textLines(titleLines, titleY, titleSize * 1.08, titleSize, "Georgia, serif", 600, "#f7f2e8")}
-    ${textLines(epitaphLines, epitaphY, epitaphSize * 1.3, epitaphSize, "system-ui, sans-serif", 400, "#ede9df")}
-    <text x="600" y="493" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" font-weight="500" fill="#d9ded8">${escapeXml(date)}</text>
+    ${model.isExample ? `<rect x="520" y="158" width="160" height="30" rx="15" fill="#594b2e"/><text x="600" y="179" text-anchor="middle" font-family="Noto Sans JP, system-ui, sans-serif" font-size="15" font-weight="700" letter-spacing="${locale === "ja" ? 1 : 3}" fill="#efd6a0">${locale === "ja" ? "投稿例" : "EXAMPLE"}</text>` : ""}
+    ${textLines(titleLines, titleY, titleSize * 1.08, titleSize, titleFamily, 600, "#f7f2e8")}
+    ${textLines(epitaphLines, epitaphY, epitaphSize * 1.3, epitaphSize, bodyFamily, 400, "#ede9df")}
+    <text x="600" y="493" text-anchor="middle" font-family="${bodyFamily}" font-size="19" font-weight="500" fill="#d9ded8">${escapeXml(date)}</text>
     <path d="M260 520h680v25H260z" rx="7" fill="#66716b"/><path d="M238 544h724v20H238z" fill="#4c5751"/>
   </svg>`;
 }
 
-export async function renderMemorialPng(grave: PublicGraveDto, scale: 1 | 2) {
-  return sharp(Buffer.from(memorialSvg(grave)))
+export async function renderMemorialPng(grave: PublicGraveDto, scale: 1 | 2, locale: Locale = "en") {
+  return sharp(Buffer.from(memorialSvg(grave, locale)))
     .resize(1200 * scale, 630 * scale, { fit: "fill" })
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer();

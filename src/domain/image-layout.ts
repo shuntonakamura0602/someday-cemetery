@@ -1,13 +1,14 @@
 import type { MemorialImageModel, PublicGraveDto } from "./types";
 import { splitGraphemes } from "./validation";
+import { localeTag, type Locale } from "@/i18n/config";
 
-export function buildMemorialImageModel(grave: PublicGraveDto): MemorialImageModel {
+export function buildMemorialImageModel(grave: PublicGraveDto, locale: Locale = "en"): MemorialImageModel {
   return {
     serviceName: "Someday Cemetery",
     title: grave.title,
     epitaph: grave.epitaph,
     startedYear: grave.startedYear,
-    buriedDate: new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "long", day: "numeric" }).format(new Date(grave.buriedAt)),
+    buriedDate: new Intl.DateTimeFormat(localeTag(locale), { timeZone: "UTC", year: "numeric", month: "long", day: "numeric" }).format(new Date(grave.buriedAt)),
     style: grave.style,
     accent: grave.accent,
     isExample: grave.isExample,

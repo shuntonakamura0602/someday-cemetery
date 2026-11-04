@@ -2,7 +2,7 @@
 
 Someday Cemetery is a quiet public garden for unfinished projects, drafts, and plans. Visitors can wander a 2D cemetery, read short epitaphs, and leave one flower from their browser. Creating, editing, sharing, and a 1200×630 memorial image are free. One **Custom Headstone** purchase—**US$7, once, for one grave**—unlocks three additional designs and a 2400×1260 keepsake.
 
-The public UI is English. The source and operations documentation are written for maintainers.
+The complete public and operator UI is available in English and Japanese. The first visit follows the browser language, and the **EN / 日本語** control keeps the selected language on later visits. Source and operations documentation are written for maintainers.
 
 ## Connection status
 
@@ -12,13 +12,13 @@ These are separate deliverables and must not be reported as interchangeable:
 | --- | --- | --- |
 | Local demo | Implemented; run the commands below to verify on this machine | Graves, ownership, flowers, recovery, and standard PNGs stay in browser storage. Examples are marked. Paid styles are preview-only. |
 | Shared Supabase service | Connected to the dedicated `someday-cemetery` Preview project; retention update pending | The initial migration and idempotent seed are applied. Anonymous Auth and Supabase Auth CAPTCHA with Cloudflare Turnstile are enabled. The deployed app uses the shared database without a demo fallback. The retention migration is implemented and locally verified, but must not be reported as applied to the hosted project until Supabase Cron is enabled and the remote migration is verified. |
-| Vercel public beta | Publicly available at [someday-cemetery-preview.vercel.app](https://someday-cemetery-preview.vercel.app) with Vercel Authentication disabled | The current deployment uses the shared Supabase project with `PAYMENTS_MODE=off`. Repository configuration now uses the public operator `Shunto Nakamura` and support address `qdemiru@gmail.com`; setting both hosted variables and redeploying remains required before those values can be reported as live. Git-triggered deployments are disabled in `vercel.json`; deploy Preview manually until Production is explicitly approved. |
+| Vercel public beta | Publicly available at [someday-cemetery-preview.vercel.app](https://someday-cemetery-preview.vercel.app) with Vercel Authentication disabled | The deployment uses the shared Supabase project with `PAYMENTS_MODE=off`, the public operator `Shunto Nakamura`, and support address `qdemiru@gmail.com`. Git-triggered deployments are disabled in `vercel.json`; deploy Preview manually until Production is explicitly approved. |
 | Polar Sandbox | Integration and tests of pure payment state transitions are present; no Sandbox token, product, or webhook is connected | Checkout is intentionally disabled in Preview. Connect and verify Sandbox checkout, webhook, reconciliation, refund, and duplicate-delivery behavior before changing `PAYMENTS_MODE`. |
 | Production / live payments | Not deployed; live payments are not configured | Keep `PAYMENTS_MODE=off` until production identity, support, monitoring, secrets, and live-payment verification are complete. |
 
 The public Preview, local demo, and Production are intentionally separate. The public Preview is the current shared-service beta; it is not a Production release.
 
-`Shunto Nakamura` is the public operator name for the free beta, and `qdemiru@gmail.com` is the public support address configured for the legal pages. Neither value is a secret. The hosted values and rendered pages still require deployment verification. Before paid sales, confirm the official legal seller identity and any required seller disclosure separately; do not infer or publish a kanji name from account profiles.
+`Shunto Nakamura` is the public operator name for the free beta, and `qdemiru@gmail.com` is the public support address configured and verified on the hosted legal pages. Neither value is a secret. Before paid sales, confirm the official legal seller identity and any required seller disclosure separately; do not infer or publish a kanji name from account profiles.
 
 ## Stack and fixed versions
 
@@ -55,6 +55,14 @@ Demo behavior includes:
 - local creation with idempotency, editing with optimistic versions, deletion, ownership recovery, flowers, random/recent visits, public-link copying, and 1200×630 PNG download;
 - all four headstones as previews, while paid application and high-resolution download remain unavailable;
 - responsive layouts including the 360px E2E project and reduced-motion styling.
+
+## Language support
+
+- English and Japanese cover the visitor flow, ownership/recovery flow, moderation UI, legal pages, metadata, validation and server errors, accessibility labels, downloadable recovery notes, and generated memorial images.
+- A valid `sc_locale` cookie wins; otherwise the first request uses `Accept-Language` (`ja` selects Japanese and every other language selects English). The header switch writes the preference for one year and refreshes the same URL.
+- URLs, public grave links, recovery links, payment callbacks, and API paths do not change when the language changes. User-written titles, epitaphs, notes, and report details are never translated or rewritten. Only the twelve maintained Examples have localized presentation copy.
+- Memorial PNG and keepsake requests include the current locale. Turnstile and Polar Checkout receive the same locale when those external services are enabled.
+- The language preference cookie is documented on the Privacy page. This release intentionally uses one canonical URL per page rather than separate `/en` and `/ja` SEO routes.
 
 ## Modes and environment safety
 
@@ -142,7 +150,7 @@ npx playwright install webkit
 npm run test:e2e:webkit
 ```
 
-The repository’s automated coverage targets grapheme-aware input, NFC/LF normalization, contact-detail rejection, demo idempotency/version/recovery/flowers, payment configuration and order decisions, and real-Postgres constraints/concurrency/RLS. The current Preview has exercised the shared Supabase schema/seed, Anonymous Auth configuration, and Turnstile readiness. A public test post was not submitted. Safari and Polar provider behavior remain external checks until those environments are exercised.
+The repository’s automated coverage targets language resolution and switching, translation-key parity, draft/query/hash preservation, Japanese memorial rendering, grapheme-aware input, NFC/LF normalization, contact-detail rejection, demo idempotency/version/recovery/flowers, payment configuration and order decisions, and real-Postgres constraints/concurrency/RLS. The current Preview has exercised the shared Supabase schema/seed, Anonymous Auth configuration, and Turnstile readiness. A public test post was not submitted. Polar provider behavior remains an external check until Sandbox is connected.
 
 Do not claim an LCP result without measuring and recording the device, browser, network, build, and URL. The target is 2.5 seconds, not a verified value in this checkout.
 

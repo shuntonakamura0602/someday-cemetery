@@ -44,9 +44,11 @@ test("UX01 and UX09: the English cemetery is readable without registration and e
   await expect(page.getByRole("heading", { name: "A few example epitaphs" })).toBeVisible();
 });
 
-test("UX02 and UX08: a title-only grave gets a public URL separate from its recovery secret", async ({ page, context }) => {
+test("UX02 and UX08: a title-only grave gets a public URL separate from its recovery secret", async ({ page, context, browserName }) => {
   const publicHref = await createDemoGrave(page, { title: "The Tiny Compiler", plot: 1 });
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(page.url()).origin });
+  if (browserName === "chromium") {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(page.url()).origin });
+  }
 
   const publicCode = await page.locator(".created-link-card").filter({ hasText: "Public link" }).locator("code").textContent();
   const recoveryCode = await page.locator(".recovery-card .secret-code").textContent();
@@ -58,10 +60,12 @@ test("UX02 and UX08: a title-only grave gets a public URL separate from its reco
 
   await page.getByRole("button", { name: "Copy public link" }).click();
   await expect(page.getByRole("button", { name: "Link copied" })).toBeVisible();
-  const clipboard = await page.evaluate(() => navigator.clipboard.readText());
-  expect(clipboard).toMatch(/\/g\/[0-9a-f-]{36}$/i);
-  expect(clipboard).not.toContain("#");
-  expect(clipboard).not.toContain("key=");
+  if (browserName === "chromium") {
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboard).toMatch(/\/g\/[0-9a-f-]{36}$/i);
+    expect(clipboard).not.toContain("#");
+    expect(clipboard).not.toContain("key=");
+  }
 
   await Promise.all([
     page.waitForURL(new RegExp(`${publicHref}$`)),

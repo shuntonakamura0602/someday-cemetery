@@ -1,40 +1,46 @@
+"use client";
+
+import { useI18n } from "@/components/language-provider";
 import type { PublicGraveDto } from "@/domain";
+import { localizeExampleGrave } from "@/i18n/presentation";
 
 type GravestoneProps = {
-  grave: Pick<PublicGraveDto, "title" | "epitaph" | "style" | "accent" | "isExample">;
+  grave: PublicGraveDto;
   compact?: boolean;
   showText?: boolean;
   className?: string;
 };
 
 export function Gravestone({ grave, compact = false, showText = true, className = "" }: GravestoneProps) {
+  const { locale, t } = useI18n();
+  const localizedGrave = localizeExampleGrave(grave, locale);
   return (
     <div
-      className={`gravestone gravestone-${grave.style} ${compact ? "gravestone-compact" : ""} ${className}`}
-      data-accent={grave.accent}
+      className={`gravestone gravestone-${localizedGrave.style} ${compact ? "gravestone-compact" : ""} ${className}`}
+      data-accent={localizedGrave.accent}
       aria-hidden={compact ? true : undefined}
     >
       <div className="gravestone-glow" />
       <div className="gravestone-body">
         <div className="gravestone-age" />
-        {grave.style === "moss" ? <span className="grave-moss" /> : null}
-        {grave.style === "wildflowers" ? (
+        {localizedGrave.style === "moss" ? <span className="grave-moss" /> : null}
+        {localizedGrave.style === "wildflowers" ? (
           <span className="grave-flowers">
             <i />
             <i />
             <i />
           </span>
         ) : null}
-        {grave.style === "lantern" ? <span className="grave-lantern" /> : null}
+        {localizedGrave.style === "lantern" ? <span className="grave-lantern" /> : null}
         {showText ? (
           <div className="gravestone-copy">
-            <p className="gravestone-title">{grave.title}</p>
-            {!compact && grave.epitaph ? <p className="gravestone-epitaph">{grave.epitaph}</p> : null}
+            <p className="gravestone-title">{localizedGrave.title}</p>
+            {!compact && localizedGrave.epitaph ? <p className="gravestone-epitaph">{localizedGrave.epitaph}</p> : null}
           </div>
         ) : null}
       </div>
       <div className="gravestone-base" />
-      {grave.isExample && !compact ? <span className="stone-example">Example</span> : null}
+      {localizedGrave.isExample && !compact ? <span className="stone-example">{t("example.badge")}</span> : null}
     </div>
   );
 }

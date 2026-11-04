@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { useRuntimeConfig } from "@/components/runtime-config";
+import { useI18n } from "@/components/language-provider";
 import type {
   CreateGraveInput,
   CreatedGraveResult,
@@ -22,6 +23,9 @@ import type {
   UpdateGraveInput,
 } from "@/domain";
 import { getDemoRepository } from "@/demo";
+import type { Locale } from "@/i18n/config";
+import { localizeFieldErrors } from "@/i18n/errors";
+import { gardenName, localizeExampleGrave } from "@/i18n/presentation";
 
 export class ClientApiError extends Error {
   constructor(
@@ -34,7 +38,12 @@ export class ClientApiError extends Error {
   }
 }
 
-async function api<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+async function api<T>(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  locale: Locale,
+  localizeError: (message: string, code?: string) => string,
+): Promise<T> {
   const response = await fetch(input, {
     ...init,
     cache: "no-store",
@@ -49,14 +58,20 @@ async function api<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> 
     fieldErrors?: Record<string, string[]>;
   } & T;
   if (!response.ok) {
+    const code = body.code ?? "REQUEST_FAILED";
+    const message = body.message ?? "Something went wrong. Your draft is safe. Please try again.";
     throw new ClientApiError(
-      body.code ?? "REQUEST_FAILED",
-      body.message ?? "Something went wrong. Your draft is safe. Please try again.",
+      code,
+      localizeError(message, code),
       response.status,
-      body.fieldErrors,
+      localizeFieldErrors(locale, body.fieldErrors),
     );
   }
   return body;
+}
+
+function presentGrave<T extends PublicGraveDto>(grave: T, locale: Locale): T {
+  return localizeExampleGrave(grave, locale) as T;
 }
 
 type ReportReason = "spam" | "harassment" | "personal_information" | "real_person" | "other";
@@ -88,6 +103,7 @@ const CemeteryContext = createContext<CemeteryContextValue | null>(null);
 
 export function CemeteryProvider({ children }: { children: ReactNode }) {
   const runtime = useRuntimeConfig();
+  const { locale, localizeError } = useI18n();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gardens, setGardens] = useState<GardenDto[]>([]);
@@ -101,6 +117,12 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     currentGardenIdRef.current = currentGardenId;
   }, [currentGardenId]);
+
+  const request = useCallback(
+    async <T,>(input: RequestInfo | URL, init?: RequestInit) =>
+      api<T>(input, init, locale, localizeError),
+    [locale, localizeError],
+  );
 
   const syncDemo = useCallback(() => {
     const repo = getDemoRepository();
@@ -117,17 +139,17 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshRemote = useCallback(async () => {
-    const gardenResult = await api<{ gardens: GardenDto[] }>("/api/gardens");
+    const gardenResult = await request<{ gardens: GardenDto[] }>("/api/gardens");
     const selected =
       gardenResult.gardens.find((garden) => garden.id === currentGardenIdRef.current)?.id ??
       gardenResult.gardens.at(-1)?.id ??
       null;
     const [plotResult, recentResult, ownerResult] = await Promise.all([
       selected
-        ? api<{ plots: GardenPlotDto[] }>(`/api/gardens/${encodeURIComponent(selected)}/graves`)
+        ? request<{ plots: GardenPlotDto[] }>(`/api/gardens/${encodeURIComponent(selected)}/graves`)
         : Promise.resolve({ plots: [] }),
-      api<{ items: PublicGraveDto[] }>("/api/graves?limit=20"),
-      api<{ items: OwnerGraveDto[] }>("/api/me/graves")
+      request<{ items: PublicGraveDto[] }>("/api/graves?limit=20"),
+      request<{ items: OwnerGraveDto[] }>("/api/me/graves")
         .then((result) => ({ ...result, hasSession: true as const }))
         .catch((requestError) => {
           if (requestError instanceof ClientApiError && requestError.status === 401) {
@@ -144,7 +166,7 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
     setHasRemoteSession(ownerResult.hasSession);
     setError(null);
     setLoading(false);
-  }, []);
+  }, [request]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -152,10 +174,14 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
       if (runtime.dataBackend === "demo") syncDemo();
       else await refreshRemote();
     } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : "The garden could not be loaded.");
+      setError(
+        refreshError instanceof Error
+          ? localizeError(refreshError.message, "code" in refreshError ? String(refreshError.code) : undefined)
+          : localizeError("The garden could not be loaded."),
+      );
       setLoading(false);
     }
-  }, [refreshRemote, runtime.dataBackend, syncDemo]);
+  }, [localizeError, refreshRemote, runtime.dataBackend, syncDemo]);
 
   useEffect(() => {
     if (runtime.dataBackend === "demo") {
@@ -168,12 +194,16 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
     }
     const timer = window.setTimeout(() => {
       void refreshRemote().catch((refreshError) => {
-        setError(refreshError instanceof Error ? refreshError.message : "The garden could not be loaded.");
+        setError(
+          refreshError instanceof Error
+            ? localizeError(refreshError.message, "code" in refreshError ? String(refreshError.code) : undefined)
+            : localizeError("The garden could not be loaded."),
+        );
         setLoading(false);
       });
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [refreshRemote, runtime.dataBackend, syncDemo]);
+  }, [localizeError, refreshRemote, runtime.dataBackend, syncDemo]);
 
   const selectGarden = useCallback(
     async (gardenId: string) => {
@@ -181,47 +211,59 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
       currentGardenIdRef.current = gardenId;
       if (runtime.dataBackend === "demo") setPlots(getDemoRepository().listGarden(gardenId));
       else {
-        const result = await api<{ plots: GardenPlotDto[] }>(
+        const result = await request<{ plots: GardenPlotDto[] }>(
           `/api/gardens/${encodeURIComponent(gardenId)}/graves`,
         );
         setPlots(result.plots);
       }
     },
-    [runtime.dataBackend],
+    [request, runtime.dataBackend],
   );
 
   const ensureRemoteSession = useCallback(async (captchaToken?: string) => {
-    await api<{ userId: string }>("/api/session/anonymous", {
+    await request<{ userId: string }>("/api/session/anonymous", {
       method: "POST",
       body: JSON.stringify({ captchaToken }),
     });
     setHasRemoteSession(true);
-  }, []);
+  }, [request]);
 
   const getGrave = useCallback(
     async (id: string) => {
-      if (runtime.dataBackend === "demo") return getDemoRepository().getGrave(id);
+      if (runtime.dataBackend === "demo") {
+        const grave = getDemoRepository().getGrave(id);
+        return grave ? presentGrave(grave, locale) : null;
+      }
       try {
-        return (await api<{ grave: PublicGraveDto }>(`/api/graves/${encodeURIComponent(id)}`)).grave;
+        return presentGrave(
+          (await request<{ grave: PublicGraveDto }>(`/api/graves/${encodeURIComponent(id)}`)).grave,
+          locale,
+        );
       } catch (requestError) {
         if (requestError instanceof ClientApiError && requestError.status === 404) return null;
         throw requestError;
       }
     },
-    [runtime.dataBackend],
+    [locale, request, runtime.dataBackend],
   );
 
   const getOwnerGrave = useCallback(
     async (id: string) => {
-      if (runtime.dataBackend === "demo") return getDemoRepository().getOwnerGrave(id);
+      if (runtime.dataBackend === "demo") {
+        const grave = getDemoRepository().getOwnerGrave(id);
+        return grave ? presentGrave(grave, locale) : null;
+      }
       try {
-        return (await api<{ grave: OwnerGraveDto }>(`/api/me/graves/${encodeURIComponent(id)}`)).grave;
+        return presentGrave(
+          (await request<{ grave: OwnerGraveDto }>(`/api/me/graves/${encodeURIComponent(id)}`)).grave,
+          locale,
+        );
       } catch (requestError) {
         if (requestError instanceof ClientApiError && [401, 403, 404].includes(requestError.status)) return null;
         throw requestError;
       }
     },
-    [runtime.dataBackend],
+    [locale, request, runtime.dataBackend],
   );
 
   const createGrave = useCallback(
@@ -230,7 +272,7 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
         return getDemoRepository().create(input, { idempotencyKey, baseUrl: window.location.origin });
       }
       await ensureRemoteSession(captchaToken);
-      const result = await api<CreatedGraveResult>("/api/graves", {
+      const result = await request<CreatedGraveResult>("/api/graves", {
         method: "POST",
         headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify(input),
@@ -238,7 +280,7 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
       await refreshRemote();
       return result;
     },
-    [ensureRemoteSession, refreshRemote, runtime.dataBackend],
+    [ensureRemoteSession, refreshRemote, request, runtime.dataBackend],
   );
 
   const updateGrave = useCallback(
@@ -247,7 +289,7 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
         runtime.dataBackend === "demo"
           ? await getDemoRepository().update(id, input)
           : (
-              await api<{ grave: OwnerGraveDto }>(`/api/graves/${encodeURIComponent(id)}`, {
+              await request<{ grave: OwnerGraveDto }>(`/api/graves/${encodeURIComponent(id)}`, {
                 method: "PATCH",
                 body: JSON.stringify(input),
               })
@@ -255,38 +297,40 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
       if (runtime.dataBackend !== "demo") await refreshRemote();
       return grave;
     },
-    [refreshRemote, runtime.dataBackend],
+    [refreshRemote, request, runtime.dataBackend],
   );
 
   const deleteGrave = useCallback(
     async (id: string, version: number) => {
       if (runtime.dataBackend === "demo") await getDemoRepository().delete(id, version);
       else {
-        await api(`/api/graves/${encodeURIComponent(id)}`, {
+        await request(`/api/graves/${encodeURIComponent(id)}`, {
           method: "DELETE",
           body: JSON.stringify({ version }),
         });
         await refreshRemote();
       }
     },
-    [refreshRemote, runtime.dataBackend],
+    [refreshRemote, request, runtime.dataBackend],
   );
 
   const leaveFlower = useCallback(
     async (id: string) => {
       if (runtime.dataBackend === "demo") return getDemoRepository().leaveFlower(id);
-      return api<{ flowerCount: number; added: boolean }>(`/api/graves/${encodeURIComponent(id)}/flowers`, {
+      return request<{ flowerCount: number; added: boolean }>(`/api/graves/${encodeURIComponent(id)}/flowers`, {
         method: "POST",
         body: "{}",
       });
     },
-    [runtime.dataBackend],
+    [request, runtime.dataBackend],
   );
 
   const randomGrave = useCallback(async () => {
-    if (runtime.dataBackend === "demo") return getDemoRepository().random();
-    return (await api<{ grave: PublicGraveDto | null }>("/api/graves/random")).grave;
-  }, [runtime.dataBackend]);
+    const grave = runtime.dataBackend === "demo"
+      ? getDemoRepository().random()
+      : (await request<{ grave: PublicGraveDto | null }>("/api/graves/random")).grave;
+    return grave ? presentGrave(grave, locale) : null;
+  }, [locale, request, runtime.dataBackend]);
 
   const rotateRecoveryLink = useCallback(
     async (id: string) => {
@@ -294,13 +338,13 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
         return (await getDemoRepository().rotateRecoveryLink(id, { baseUrl: window.location.origin })).recoveryUrl;
       }
       return (
-        await api<{ recoveryUrl: string }>(`/api/graves/${encodeURIComponent(id)}/recovery-link`, {
+        await request<{ recoveryUrl: string }>(`/api/graves/${encodeURIComponent(id)}/recovery-link`, {
           method: "POST",
           body: "{}",
         })
       ).recoveryUrl;
     },
-    [runtime.dataBackend],
+    [request, runtime.dataBackend],
   );
 
   const recover = useCallback(
@@ -310,12 +354,12 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
         return { grave: result.grave, recoveryUrl: result.recoveryUrl };
       }
       await ensureRemoteSession(captchaToken);
-      return api<{ grave: OwnerGraveDto; recoveryUrl: string }>("/api/recover", {
+      return request<{ grave: OwnerGraveDto; recoveryUrl: string }>("/api/recover", {
         method: "POST",
         body: JSON.stringify({ graveId: id, key }),
       });
     },
-    [ensureRemoteSession, runtime.dataBackend],
+    [ensureRemoteSession, request, runtime.dataBackend],
   );
 
   const report = useCallback(
@@ -324,12 +368,29 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
         getDemoRepository().reportGrave(id);
         return;
       }
-      await api(`/api/graves/${encodeURIComponent(id)}/reports`, {
+      await request(`/api/graves/${encodeURIComponent(id)}/reports`, {
         method: "POST",
         body: JSON.stringify({ reason, details, turnstileToken }),
       });
     },
-    [runtime.dataBackend],
+    [request, runtime.dataBackend],
+  );
+
+  const presentedGardens = useMemo(
+    () => gardens.map((garden) => ({ ...garden, name: gardenName(garden.ordinal, locale) })),
+    [gardens, locale],
+  );
+  const presentedPlots = useMemo(
+    () => plots.map((plot) => ({ ...plot, grave: plot.grave ? presentGrave(plot.grave, locale) : undefined })),
+    [locale, plots],
+  );
+  const presentedRecent = useMemo(
+    () => recent.map((grave) => presentGrave(grave, locale)),
+    [locale, recent],
+  );
+  const presentedOwned = useMemo(
+    () => owned.map((grave) => presentGrave(grave, locale)),
+    [locale, owned],
   );
 
   const value = useMemo<CemeteryContextValue>(
@@ -337,11 +398,11 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       needsAnonymousSession: runtime.dataBackend === "supabase" && hasRemoteSession === false,
-      gardens,
-      currentGarden: gardens.find((garden) => garden.id === currentGardenId) ?? null,
-      plots,
-      recent,
-      owned,
+      gardens: presentedGardens,
+      currentGarden: presentedGardens.find((garden) => garden.id === currentGardenId) ?? null,
+      plots: presentedPlots,
+      recent: presentedRecent,
+      owned: presentedOwned,
       selectGarden,
       refresh,
       getGrave,
@@ -359,11 +420,11 @@ export function CemeteryProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       hasRemoteSession,
-      gardens,
+      presentedGardens,
       currentGardenId,
-      plots,
-      recent,
-      owned,
+      presentedPlots,
+      presentedRecent,
+      presentedOwned,
       selectGarden,
       refresh,
       getGrave,

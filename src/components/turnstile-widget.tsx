@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
+import { useI18n } from "@/components/language-provider";
+
 declare global {
   interface Window {
     turnstile?: {
@@ -36,6 +38,7 @@ function loadScript() {
 }
 
 export function TurnstileWidget({ siteKey, onToken }: { siteKey: string; onToken: (token: string | null) => void }) {
+  const { locale } = useI18n();
   const container = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let active = true;
@@ -46,6 +49,7 @@ export function TurnstileWidget({ siteKey, onToken }: { siteKey: string; onToken
         sitekey: siteKey,
         theme: "dark",
         size: "flexible",
+        language: locale,
         callback: (token: string) => onToken(token),
         "expired-callback": () => onToken(null),
         "error-callback": () => onToken(null),
@@ -55,6 +59,6 @@ export function TurnstileWidget({ siteKey, onToken }: { siteKey: string; onToken
       active = false;
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
     };
-  }, [onToken, siteKey]);
+  }, [locale, onToken, siteKey]);
   return <div className="turnstile-container" ref={container} />;
 }
